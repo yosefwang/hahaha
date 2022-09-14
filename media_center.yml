@@ -1,0 +1,320 @@
+version: "3"
+services:
+
+  transmission_openvpn:
+    image: haugene/transmission-openvpn
+    container_name: transmission_openvpn
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun
+    volumes:
+      - ${DOWNLOAD}
+      - ${APPDATA}transmission-openvpn/config:/config
+      - ${APPDATA}transmission-openvpn/data:/data
+    environment:
+      - OPENVPN_PROVIDER=${VPN_PROVIDER}
+      - OPENVPN_CONFIG=${VPN_CONFIG_AMS}
+      - OPENVPN_USERNAME=${VPN_USR}
+      - OPENVPN_PASSWORD=${VPN_PWD}
+      - TRANSMISSION_DOWNLOAD_DIR=/downloads/complete
+      - TRANSMISSION_INCOMPLETE_DIR=/downloads/incomplete
+      - TRANSMISSION_WATCH_DIR=/downloads/watch
+      - LOCAL_NETWORK=172.18.0.1/16
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+    restart: unless-stopped
+    ports:
+      - 9091:9091
+
+#  nzbgetvpn:
+#    image: dyonr/nzbgetvpn
+#    container_name: nzbgetvpn
+#    devices:
+#      - /dev/net/tun
+#    cap_add:
+#      - NET_ADMIN
+#    volumes:
+#      - ${APPDATA}nzbget:/config
+#      - ${DOWNLOAD}
+#    environment:
+#      - VPN_ENABLED=yes
+#      - VPN_TYPE=openvpn
+#      - LAN_NETWORK=172.18.0.1/24
+#      - NAME_SERVERS= 1.1.1.1,1.0.0.1
+#      - VPN_USERNAME=${VPN_USR}
+#      - VPN_PASSWORD=${VPN_PWD}
+#      - WEBUI_USERNAME=jsph
+#      - WEBUI_PASSWORD=1qaz2wsx
+#      - PUID=${PUID}
+#      - PGID=${PGID}
+#      - UMASK=003
+#    ports:
+#      - 6789:6789
+#      - 6791:6791
+#    restart: unless-stopped
+
+#  openvpnsocks5:
+#    container_name: openvpnsocks5
+#    image: jonoh/openvpn-socks
+#    restart: unless-stopped
+#    devices:
+#      - /dev/net/tun
+#    cap_add:
+#      - NET_ADMIN
+#    volumes:
+#      - ${APPDATA}openvpnsocks5:/config
+#    environment:
+#      - OPENVPN_USERNAME=${VPN_USR}
+#      - OPENVPN_PASSWORD=${VPN_PWD}
+#      - OPENVPN_CONFIG_FILE=/config/vpnconf.ovpn
+#    ports:
+#      - 1080:1080
+      
+  openvpnhttp:
+    container_name: openvpnhttp
+    image: jonoh/openvpn-proxy
+    restart: unless-stopped
+    devices:
+      - /dev/net/tun
+    cap_add:
+      - NET_ADMIN
+    volumes:
+      - ${APPDATA}openvpnhttp:/config
+    environment:
+      - OPENVPN_USERNAME=${VPN_USR}
+      - OPENVPN_PASSWORD=${VPN_PWD}
+      - LOCAL_NETWORK=172.18.0.1/24
+      - OPENVPN_CONFIG_FILE=/config/vpnconf.ovpn
+      - OPENVPN_PROXY_PORT=6060
+    ports:
+      - 60:80
+      - 6060:6060
+      
+  transmission-tracker-add:
+    network_mode: host
+    environment:
+      - HOSTPORT=172.18.0.1:9091
+      - TR_AUTH=jsph:1qaz2wsx
+    container_name: transmission-tracker-add
+    image: andrewmhub/transmission-tracker-add:latest
+    restart: unless-stopped
+
+  telegram-transmission-bot:
+    container_name: telegram-transmission-bot
+    restart: on-failure
+    depends_on:
+      - transmission_openvpn
+    network_mode: 'host'
+    image: kevinhalpin/transmission-telegram:latest
+    command: '-token=${TELEGRAM_TRANSMISSION_BOT} -master=${TELEGRAM_USERNAME} -url=${TRANSMISSION_URL}'
+
+  telegram-radarr-bot:
+    container_name: telegram-radarr-bot
+    restart: on-failure
+    depends_on:
+      - radarr
+    network_mode: 'host'
+    image: itsmegb/telegram-radarr-bot
+    volumes:
+      - ${APPDATA}radarr_bot/config:/config
+
+  sonarr:
+    image: ghcr.io/linuxserver/sonarr:latest
+    container_name: sonarr
+    restart: unless-stopped
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - ${APPDATA}sonarr:/config
+      - ${GMEDIA_TV}
+      - ${DOWNLOAD}
+    ports:
+      - 8989:8989
+
+  radarr:
+    image: ghcr.io/linuxserver/radarr:latest
+    container_name: radarr
+    restart: unless-stopped
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - ${APPDATA}radarr:/config
+      - ${GMEDIA_MOVIE}
+      - ${DOWNLOAD}
+    ports:
+      - 7878:7878
+
+  readarr:
+    image: vcxpz/readarr
+    container_name: readarr
+    restart: unless-stopped
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - ${APPDATA}readarr:/config
+      - ${GMEDIA_BOOKS}
+      - ${DOWNLOAD}
+    ports:
+      - 8787:8787
+
+  calibre-server:
+    image: lscr.io/linuxserver/calibre
+    container_name: calibre-server
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - PASSWORD=${CALIBRE_PASSWORD}
+#      - CLI_ARGS=${CALIBRE_ARGS}
+    volumes:
+      - ${APPDATA}calibre-server:/config
+      - /mnt/gdrive/library:/library
+    ports:
+      - 7070:8080
+      - 7071:8081
+
+  calibre-web:
+    image: lscr.io/linuxserver/calibre-web
+    container_name: calibre-web
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - ${APPDATA}calibre-web:/config
+      - /mnt/gdrive/library:/library
+    ports:
+      - 8083:8083
+    restart: unless-stopped
+
+  sabnzbd:
+    image: ghcr.io/linuxserver/sabnzbd
+    container_name: sabnzbd
+    restart: unless-stopped
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - ${APPDATA}sabnzdb:/config
+      - ${DOWNLOAD}
+    ports:
+      - 8080:8080
+
+#  ombi:
+#    image: ghcr.io/linuxserver/ombi
+#    container_name: ombi
+#    restart: unless-stopped
+#    environment:
+#      - PUID=${USVC}
+#      - PGID=${GSVC}
+#      - TZ=${TZ}
+#    volumes:
+#      - ${APPDATA}ombi:/config
+#    ports:
+#      - 3579:3579
+
+  jackett:
+    image: linuxserver/jackett
+    container_name: jackett
+    restart: unless-stopped
+    environment:
+      - PUID=${USVC}
+      - PGID=${GSVC}
+      - TZ=${TZ}
+      - AUTO_UPDATE=true
+    volumes:
+      - ${APPDATA}jackett:/config
+    ports:
+      - 9117:9117
+
+#  tautulli:
+#    image: ghcr.io/linuxserver/tautulli
+#    container_name: tautulli
+#    restart: unless-stopped
+#    environment:
+#      - PUID=${PUID}
+#      - PGID=${PGID}
+#      - TZ=${TZ}
+#    volumes:
+#      - ${APPDATA}tautulli:/config
+#    ports:
+#      - 8181:8181
+#
+#  plex:
+#    image: ghcr.io/linuxserver/plex
+#    container_name: plex
+#    restart: unless-stopped
+#    network_mode: host
+#    environment:
+#      - PUID=${PUID}
+#      - PGID=${PGID}
+#    volumes:
+#      - ${APPDATA}plex:/config
+#      - ${GMEDIA}
+
+  jellyfin:
+    image: lscr.io/linuxserver/jellyfin
+    container_name: jellyfin
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    network_mode: "host"
+    volumes:
+      - ${APPDATA}/jellyfin/config:/config
+      - ${APPDATA}/jellyfin/cache:/cache
+      - ${GMEDIA}
+    restart: unless-stopped
+    ports:
+      - 8096:8096
+
+  watchtower:
+    image: containrrr/watchtower
+    container_name: watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  lazylibrarian:
+    image: thraxis/lazylibrarian-calibre
+    container_name: lazylibrarian
+    restart: unless-stopped
+    volumes:
+      - /downloads/complete/books:/downloads
+      - ${APPDATA}/lazylibrarian/config:/config
+      - /library/books:/books
+      - /library/magazines:/magazines
+      - /library/comics:/comics
+      - /library/audiobooks:/audiobooks
+      - /mnt/gdrive/library:/gdrive_library
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+#      - DOCKER_MODS=linuxserver/calibre-web:calibre|linuxserver/mods:lazylibrarian-ffmpeg
+    ports:
+      - 5299:5299
+
+  portainer:
+    image: portainer/portainer-ce:2.0.1
+    container_name: portainer
+    command: -H unix:///var/run/docker.sock
+    restart: always
+    ports:
+      - 9000:9000
+      - 8000:8000
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+volumes:
+  portainer_data:
