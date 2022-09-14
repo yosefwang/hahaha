@@ -30,6 +30,7 @@ VPN_CONFIG_LOS=us-lax_udp
 VPN_CONFIG_BUF=us-buf_udp
 VPN_CONFIG_HOU=us-hou_udp
 VPN_CONFIG_AMS=nl-ams_udp
+VPN_CONFIG_LON=uk-lon_udp
 
 #telegram-bot:transmission
 TELEGRAM_TRANSMISSION_BOT=5001513388:AAH-Wq7KlvcZSaSEcAfdC1w8FG9SLq5pQBI
